@@ -1,0 +1,17 @@
+# build outputs
+/build/
+/build-*/
+/dist/
+*.erdb
+*.o
+*.a
+
+# generated test fixtures (built from tests/hello.c / tests/mkelf.py by tests/run.sh)
+/tests/bin/
+
+# python / editor / OS
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+.idea/

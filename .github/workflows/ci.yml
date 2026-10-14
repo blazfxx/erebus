@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-14          # Apple silicon
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install cmake ninja capstone cpp-httplib nlohmann-json keystone
+
+      - name: Build engine
+        run: |
+          cmake -S . -B build -G Ninja
+          cmake --build build
+
+      - name: Tests (otool cross-check, loaders, decompiler, patching, Python client)
+        run: ./tests/run.sh
+
+      - name: Short fuzz run
+        run: python3 tests/fuzz.py 60 1
+
+      - name: Build the app
+        run: scripts/build-app.sh --zip
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Erebus-macos-arm64
+          path: dist/*.zip

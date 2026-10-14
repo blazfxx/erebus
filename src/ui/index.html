@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Erebus</title>
+<style>
+:root {
+  --bg: #14161a; --panel: #1a1d23; --panel2: #20242b; --line: #2b3039; --text: #d5dae3; --dim: #7c8596;
+  --accent: #6aa6ff; --sel: #27406b; --hl: #3a3a1f;
+  --call: #e5a35a; --jmp: #7fc8a9; --ret: #e06c75; --reg: #c792ea; --imm: #82aaff; --str: #a8cc8c; --cmt: #6f7a8c;
+  --name: #e8c37a; --t: #4cc38a; --f: #e0636d; --j: #5b9bff; --fall: #8a93a3;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f6f8; --panel: #ffffff; --panel2: #eef0f4; --line: #d8dce4; --text: #1f2430; --dim: #6b7486;
+    --accent: #1f6feb; --sel: #cfe0ff; --hl: #fff4c2;
+    --call: #b45f06; --jmp: #1a7f5a; --ret: #c0392b; --reg: #7b3fb2; --imm: #1f5fbf; --str: #3c7a1e; --cmt: #8590a2;
+    --name: #8a5a00; --t: #1a9a63; --f: #c93642; --j: #2a6fdb; --fall: #7b8494;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f5f6f8; --panel: #ffffff; --panel2: #eef0f4; --line: #d8dce4; --text: #1f2430; --dim: #6b7486;
+  --accent: #1f6feb; --sel: #cfe0ff; --hl: #fff4c2;
+  --call: #b45f06; --jmp: #1a7f5a; --ret: #c0392b; --reg: #7b3fb2; --imm: #1f5fbf; --str: #3c7a1e; --cmt: #8590a2;
+  --name: #8a5a00; --t: #1a9a63; --f: #c93642; --j: #2a6fdb; --fall: #7b8494;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text);
+  font: 13px/1.4 ui-sans-serif, -apple-system, "Segoe UI", sans-serif; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+#app { display: grid; grid-template-rows: 40px 1fr 190px 24px; grid-template-columns: 320px 1fr; height: 100%; }
+header { grid-column: 1 / 3; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 14px; margin: 0; letter-spacing: .5px; }
+header .file { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+button, input, select { font: inherit; color: inherit; background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 9px; }
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.on { background: var(--sel); border-color: var(--accent); }
+input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+#goto { width: 220px; }
+#side { grid-row: 2 / 4; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); min-height: 0; }
+#tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px; border-bottom: 1px solid var(--line); }
+#tabs button { padding: 3px 8px; border-color: transparent; background: transparent; color: var(--dim); }
+#tabs button.on { color: var(--text); background: var(--sel); }
+#q { margin: 6px; }
+#list { flex: 1; overflow: auto; min-height: 0; }
+.row { display: flex; gap: 8px; padding: 2px 10px; cursor: pointer; white-space: nowrap; }
+.row:hover { background: var(--panel2); }
+.row.cur { background: var(--sel); }
+.row .a { color: var(--dim); }
+.row .n { overflow: hidden; text-overflow: ellipsis; }
+.row .x { color: var(--dim); margin-left: auto; }
+#count { padding: 3px 10px; color: var(--dim); border-top: 1px solid var(--line); }
+#main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#vtabs { display: flex; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--panel); align-items: center; }
+#vtabs .grow { flex: 1; }
+#views { flex: 1; position: relative; min-height: 0; }
+.view { position: absolute; inset: 0; overflow: auto; display: none; }
+.view.on { display: block; }
+#bottom { grid-column: 2; background: var(--panel); border-top: 1px solid var(--line); overflow: auto; }
+#bottom h3 { margin: 0; padding: 6px 12px; font-size: 12px; color: var(--dim); position: sticky; top: 0; background: var(--panel);
+  border-bottom: 1px solid var(--line); font-weight: 600; }
+footer { grid-column: 1 / 3; display: flex; gap: 16px; align-items: center; padding: 0 12px; background: var(--panel);
+  border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; }
+footer .keys { margin-left: auto; }
+
+/* listing */
+.ln { display: flex; gap: 14px; padding: 0 12px; white-space: pre; min-height: 18px; }
+.ln:hover { background: var(--panel2); }
+.ln.sel { background: var(--sel); }
+.ln.hl { background: var(--hl); }
+.ln.patched .addr { color: var(--ret); font-weight: 700; }
+.ln.patched .bytes { color: var(--ret); }
+.ln .addr { color: var(--dim); }
+.ln .bytes { color: var(--dim); width: 190px; display: none; }
+body.showbytes .ln .bytes { display: inline-block; }
+.ln .ins { min-width: 0; }
+.m { color: var(--text); font-weight: 600; }
+.m.call { color: var(--call); } .m.jmp { color: var(--jmp); } .m.ret { color: var(--ret); }
+.reg { color: var(--reg); } .imm { color: var(--imm); }
+.ref { color: var(--name); cursor: pointer; text-decoration: underline dotted transparent; }
+.ref:hover { text-decoration-color: var(--name); }
+.cmt { color: var(--cmt); }
+.cmt .ref { color: var(--str); }
+.lbl { color: var(--name); font-weight: 700; padding-top: 6px; }
+.lbl .from { color: var(--cmt); font-weight: 400; margin-left: 14px; }
+.fhead { color: var(--cmt); padding: 10px 12px 2px; border-top: 1px solid var(--line); white-space: pre; }
+.fhead:first-child { border-top: 0; }
+.more { padding: 8px 12px; }
+.empty { padding: 24px; color: var(--dim); }
+
+/* graph */
+#gsvg { width: 100%; height: 100%; cursor: grab; display: block; background: var(--bg); }
+#gsvg.drag { cursor: grabbing; }
+.gnode rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; rx: 6; }
+.gnode.entry rect { stroke: var(--accent); stroke-width: 1.8; }
+.gnode.hl rect { fill: var(--hl); }
+.gnode text { font: 12px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: var(--text); white-space: pre; }
+.gnode .glbl { fill: var(--name); font-weight: 700; }
+.gnode .gaddr { fill: var(--dim); }
+.gnode .gm { font-weight: 600; } .gnode .gm.call { fill: var(--call); } .gnode .gm.jmp { fill: var(--jmp); } .gnode .gm.ret { fill: var(--ret); }
+.gnode .gref { fill: var(--name); cursor: pointer; }
+.gnode .gcmt { fill: var(--cmt); }
+.edge { fill: none; stroke-width: 1.5; }
+.edge.k0 { stroke: var(--fall); } .edge.k1 { stroke: var(--j); } .edge.k2 { stroke: var(--t); } .edge.k3 { stroke: var(--f); }
+#gtools { position: absolute; top: 8px; right: 12px; display: flex; gap: 6px; }
+
+/* pseudo-code */
+.pl { padding: 0 14px; white-space: pre; min-height: 18px; }
+.pl:hover { background: var(--panel2); }
+.pc-k { color: var(--call); font-weight: 600; } .pc-d { color: var(--jmp); } .pc-n { color: var(--imm); }
+.pc-s { color: var(--str); } .pc-r { color: var(--name); cursor: pointer; } .pc-c { color: var(--cmt); } .pc-v { color: var(--text); }
+.pc-r:hover { text-decoration: underline; }
+
+/* hex */
+.hexrow { display: flex; gap: 16px; padding: 0 12px; white-space: pre; }
+.hexrow .o { color: var(--dim); } .hexrow .asc { color: var(--str); }
+.hexrow .z { color: var(--dim); }
+#hexbar { padding: 8px 12px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+
+/* call tree */
+#calls { padding: 10px 14px; }
+#calls details { margin-left: 16px; }
+#calls summary { cursor: pointer; padding: 1px 0; }
+#calls .leaf { margin-left: 32px; padding: 1px 0; }
+#calls a { color: var(--name); cursor: pointer; }
+
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 380px; }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog h2 { margin: 0 0 4px; font-size: 14px; }
+dialog p { margin: 0 0 10px; color: var(--dim); }
+dialog input { width: 100%; margin-bottom: 12px; }
+dialog .btns { display: flex; justify-content: flex-end; gap: 8px; }
+#toast { position: fixed; bottom: 34px; right: 16px; background: var(--panel2); border: 1px solid var(--line); padding: 8px 12px;
+  border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+#toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>EREBUS</h1>
+    <span class="file mono" id="file"></span>
+    <button id="btnBack" title="Back (Esc)">&larr;</button>
+    <input id="goto" class="mono" placeholder="goto: address or name  (g)" autocomplete="off" spellcheck="false">
+    <button id="btnReanalyze" title="Rerun analysis (after patching)">reanalyze</button>
+    <button id="btnExport" title="Write the patched binary">export</button>
+    <button id="btnBytes" title="Toggle opcode bytes (b)">bytes</button>
+    <button id="btnTheme" title="Toggle theme">theme</button>
+  </header>
+
+  <aside id="side">
+    <div id="tabs"></div>
+    <input id="q" placeholder="filter (/)" autocomplete="off" spellcheck="false">
+    <div id="list" class="mono"></div>
+    <div id="count"></div>
+  </aside>
+
+  <section id="main">
+    <div id="vtabs">
+      <button data-v="text" class="on">Disassembly</button>
+      <button data-v="graph">Graph</button>
+      <button data-v="pseudo">Pseudo</button>
+      <button data-v="hex">Hex</button>
+      <button data-v="calls">Calls</button>
+      <span class="grow"></span>
+      <span id="where" class="mono" style="color:var(--dim)"></span>
+    </div>
+    <div id="views">
+      <div class="view on mono" id="vtext"></div>
+      <div class="view" id="vgraph"><svg id="gsvg"></svg>
+        <div id="gtools"><button id="gfit">fit</button><button id="gzin">+</button><button id="gzout">&minus;</button></div></div>
+      <div class="view mono" id="vpseudo"></div>
+      <div class="view mono" id="vhex"></div>
+      <div class="view" id="vcalls"><div id="calls" class="mono"></div></div>
+    </div>
+  </section>
+
+  <section id="bottom"><h3 id="xhead">Cross references</h3><div id="xlist" class="mono"></div></section>
+
+  <footer>
+    <span id="stat"></span>
+    <span class="keys">g goto &middot; n rename &middot; ; comment &middot; p patch &middot; a assemble &middot; u revert &middot; x xrefs &middot; space text/graph &middot; 3 pseudo &middot; esc back &middot; / filter</span>
+  </footer>
+</div>
+
+<dialog id="dlg"><form method="dialog">
+  <h2 id="dlgT"></h2><p id="dlgP" class="mono"></p>
+  <input id="dlgI" class="mono" autocomplete="off" spellcheck="false">
+  <div class="btns"><button value="cancel">Cancel</button><button value="ok" id="dlgOk" class="on">OK</button></div>
+</form></dialog>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("erebus." + k); return v == null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("erebus." + k, v); } catch (e) {} },
+};
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+const post = (p, body) => api(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 2200); }
+
+const S = { info: null, func: null, funcAddr: null, sel: null, hover: null, view: store.get("view", "text"), list: store.get("list", "funcs"),
+            history: [], listItems: [], linNext: null, mode: "func" };
+
+/* ---------- operand coloring ---------- */
+const REG_RE = new RegExp("\\b(?:[xw](?:[0-9]|[12][0-9]|30)|sp|xzr|wzr|lr|fp|[vqdsbh](?:[0-9]|[12][0-9]|3[01])|nzcv|" +
+  "r(?:[abcd]x|[sd]i|[sb]p|8|9|1[0-5])[dwb]?|e(?:[abcd]x|[sd]i|[sb]p)|[abcd][xlh]|[sd]il?|[sb]pl?|rip|eip|" +
+  "[xyz]mm(?:[0-9]|[12][0-9]|3[01])|[cdefgs]s|st\\([0-7]\\))\\b", "g");
+const IMM_RE = /#?-?0x[0-9a-fA-F]+|#-?\d+\b|\b\d+\b/g;
+function colorize(parent, text) {
+  const tokens = [];
+  let m;
+  REG_RE.lastIndex = 0; IMM_RE.lastIndex = 0;
+  while ((m = REG_RE.exec(text))) tokens.push({ i: m.index, n: m[0].length, c: "reg" });
+  while ((m = IMM_RE.exec(text))) tokens.push({ i: m.index, n: m[0].length, c: "imm" });
+  tokens.sort((a, b) => a.i - b.i);
+  let pos = 0;
+  for (const t of tokens) {
+    if (t.i < pos) continue;
+    if (t.i > pos) parent.append(text.slice(pos, t.i));
+    parent.append(Object.assign(el("span", t.c), { textContent: text.slice(t.i, t.i + t.n) }));
+    pos = t.i + t.n;
+  }
+  if (pos < text.length) parent.append(text.slice(pos));
+}
+function mnemClass(m) {
+  if (/^(call|bl|blr|blraa|blrab|blraaz|blrabz)$/.test(m)) return "call";
+  if (/^(ret|retaa|retab|eret|iret|iretq|retn|retf)$/.test(m)) return "ret";
+  if (/^(j[a-z]+|b|br|bra[a-z]*|b\.[a-z]+|cbn?z|tbn?z|loop[a-z]*)$/.test(m)) return "jmp";
+  return "";
+}
+function partsInto(parent, parts, refCls) {
+  for (const p of parts) {
+    if (p.a) {
+      const s = el("span", refCls || "ref", p.t);
+      s.dataset.a = p.a;
+      parent.append(s);
+    } else if (refCls === "cmtplain") parent.append(p.t);
+    else colorize(parent, p.t);
+  }
+}
+
+/* ---------- listing ---------- */
+function insnLine(i) {
+  const d = el("div", "ln");
+  d.dataset.a = i.a;
+  if (i.p) d.classList.add("patched");
+  d.append(Object.assign(el("span", "addr"), { textContent: i.a.replace(/^0x/, "").padStart(16, "0") }));
+  d.append(Object.assign(el("span", "bytes"), { textContent: i.b }));
+  const ins = el("span", "ins");
+  const m = el("span", "m " + mnemClass(i.m), i.m);
+  ins.append(m);
+  if (i.o.length) { ins.append(" "); partsInto(ins, i.o); }
+  if (i.c.length) {
+    const c = el("span", "cmt"); c.append("   ; "); partsInto(c, i.c, "ref"); ins.append(c);
+  }
+  d.append(ins);
+  return d;
+}
+function renderFunc(f) {
+  const v = $("#vtext");
+  v.textContent = "";
+  const head = el("div", "fhead",
+    `; ${f.n}  [${f.a} - ${f.end})  ${f.size} bytes, ${f.blocks.length} blocks${f.noret ? ", noreturn" : ""}${f.thunk ? ", thunk" : ""}` +
+    (f.xrefs.length ? `\n; XREFS: ${f.xrefs.slice(0, 6).map(x => x.n + "(" + x.t + ")").join(" ")}${f.xrefs.length > 6 ? " ... (+" + (f.xrefs.length - 6) + ")" : ""}` : ""));
+  v.append(head);
+  const frag = document.createDocumentFragment();
+  f.blocks.forEach((b, bi) => {
+    if (b.label) {
+      const l = el("div", "ln lbl");
+      l.dataset.a = b.a;
+      const nm = el("span", "ref", b.label + ":");
+      nm.dataset.a = b.a; nm.dataset.label = "1";
+      l.append(nm);
+      if (bi && b.from.length) l.append(Object.assign(el("span", "from"), { textContent: "; from " + b.from.join(" ") }));
+      frag.append(l);
+    }
+    for (const i of b.insns) frag.append(insnLine(i));
+  });
+  v.append(frag);
+}
+async function renderLinear(addr, append) {
+  const v = $("#vtext");
+  const r = await api("/api/lin?a=" + encodeURIComponent(addr) + "&n=200");
+  if (!append) { v.textContent = ""; v.append(el("div", "fhead", "; linear listing at " + addr + " (not inside a function)")); }
+  else $(".more", v)?.remove();
+  const frag = document.createDocumentFragment();
+  for (const i of r.insns) {
+    if (i.label) { const l = el("div", "ln lbl"); l.dataset.a = i.a; l.append(Object.assign(el("span", "ref", i.label + ":"), { })); l.firstChild.dataset.a = i.a; frag.append(l); }
+    frag.append(insnLine(i));
+  }
+  v.append(frag);
+  if (!r.insns.length) v.append(el("div", "empty", "nothing decodable here — try the Hex tab"));
+  else {
+    const more = el("div", "more"); const b = el("button", "", "more"); b.onclick = () => renderLinear(r.next, true);
+    more.append(b); v.append(more);
+  }
+  S.linNext = r.next;
+}
+
+/* ---------- navigation ---------- */
+async function go(loc, opts = {}) {
+  let w;
+  try { w = await api("/api/where?a=" + encodeURIComponent(loc)); }
+  catch (e) { toast("cannot resolve '" + loc + "'"); return; }
+  if (opts.push !== false && S.sel && S.sel !== w.a) S.history.push(S.sel);
+  if (S.history.length > 200) S.history.shift();
+  S.sel = w.a;
+  $("#where").textContent = w.a + "  " + w.n;
+  if (w.func) {
+    if (S.funcAddr !== w.func) {
+      S.func = await api("/api/func?a=" + encodeURIComponent(w.func));
+      S.funcAddr = w.func;
+      S.mode = "func";
+      renderFunc(S.func);
+      buildGraph(S.func);
+    }
+  } else {
+    S.func = null; S.funcAddr = null; S.mode = "lin";
+    await renderLinear(w.a, false);
+    $("#gsvg").textContent = "";
+  }
+  highlight(w.a);
+  markList();
+  if (S.view === "hex") loadHex(w.a);
+  if (S.view === "pseudo") loadPseudo(w.a);
+  if (S.view === "calls") loadCalls(w.a);
+  loadXrefs(w.func && w.func === w.a ? w.a : w.a);
+}
+function highlight(addr) {
+  document.querySelectorAll(".ln.hl, .ln.sel").forEach(e => e.classList.remove("hl", "sel"));
+  document.querySelectorAll(".gnode.hl").forEach(e => e.classList.remove("hl"));
+  const t = $(`#vtext .ln[data-a="${addr}"]`);
+  if (t) { t.classList.add("hl"); if (S.view === "text") t.scrollIntoView({ block: "center" }); }
+  const g = S.nodeAt && S.nodeAt(addr);
+  if (g) { g.el.classList.add("hl"); if (S.view === "graph") focusNode(g); }
+}
+function back() {
+  const p = S.history.pop();
+  if (p) go(p, { push: false });
+}
+
+/* ---------- xrefs ---------- */
+async function loadXrefs(addr) {
+  try {
+    const r = await api("/api/xrefs?a=" + encodeURIComponent(addr));
+    $("#xhead").textContent = `Cross references to ${r.n}  (${r.items.length})`;
+    const box = $("#xlist"); box.textContent = "";
+    if (!r.items.length) box.append(el("div", "empty", "no references to this location"));
+    for (const x of r.items) {
+      const row = el("div", "row");
+      row.append(el("span", "a", x.a.replace(/^0x/, "").padStart(16, "0")), el("span", "n", x.n), el("span", "x", x.t));
+      row.onclick = () => go(x.a);
+      box.append(row);
+    }
+  } catch (e) {}
+}
+
+/* ---------- side lists ---------- */
+const LISTS = [["funcs", "Functions"], ["names", "Names"], ["strings", "Strings"], ["imports", "Imports"], ["exports", "Exports"], ["segs", "Segments"]];
+function buildTabs() {
+  const t = $("#tabs");
+  for (const [k, label] of LISTS) {
+    const b = el("button", k === S.list ? "on" : "", label);
+    b.onclick = () => { S.list = k; store.set("list", k); t.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); loadList(); };
+    t.append(b);
+  }
+}
+let listTimer;
+async function loadList() {
+  const q = $("#q").value, box = $("#list");
+  clearTimeout(listTimer);
+  listTimer = setTimeout(async () => {
+    let items = [], total = 0;
+    try {
+      if (S.list === "funcs") { const r = await api("/api/funcs?q=" + encodeURIComponent(q)); items = r.items.map(f => ({ a: f.a, n: f.n, x: f.t ? "thunk" : f.r ? "noret" : f.s + "b" })); total = r.total; }
+      else if (S.list === "segs") {
+        items = S.info.segments.map(s => ({ a: s.a, n: s.name, x: (s.perms & 1 ? "r" : "-") + (s.perms & 2 ? "w" : "-") + (s.perms & 4 ? "x" : "-") }))
+                 .filter(s => s.n.toLowerCase().includes(q.toLowerCase())); total = items.length;
+      } else { const r = await api(`/api/list?kind=${S.list}&q=${encodeURIComponent(q)}`); items = r.items; total = r.total; }
+    } catch (e) { items = []; }
+    S.listItems = items;
+    box.textContent = "";
+    const frag = document.createDocumentFragment();
+    for (const it of items) {
+      const row = el("div", "row");
+      row.dataset.a = it.a;
+      row.append(el("span", "a", it.a.replace(/^0x/, "").padStart(S.info.bits === 64 ? 12 : 8, "0")), el("span", "n", it.n));
+      if (it.x) row.append(el("span", "x", it.x));
+      row.onclick = () => go(it.a);
+      frag.append(row);
+    }
+    box.append(frag);
+    $("#count").textContent = items.length < total ? `${items.length} of ${total}` : `${total} items`;
+    markList();
+  }, 120);
+}
+function markList() {
+  const f = S.funcAddr;
+  document.querySelectorAll("#list .row").forEach(r => r.classList.toggle("cur", r.dataset.a === f || r.dataset.a === S.sel));
+}
+
+/* ---------- views ---------- */
+function setView(v) {
+  S.view = v; store.set("view", v);
+  document.querySelectorAll("#vtabs button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  for (const id of ["text", "graph", "pseudo", "hex", "calls"]) $("#v" + id).classList.toggle("on", id === v);
+  if (v === "hex" && S.sel) loadHex(S.sel);
+  if (v === "pseudo") loadPseudo(S.sel);
+  if (v === "calls" && S.sel) loadCalls(S.sel);
+  if (v === "graph") { if (!S.gfit) fitGraph(); }
+  if (S.sel) highlight(S.sel);
+}
+
+/* ---------- pseudo-code ---------- */
+async function loadPseudo(addr) {
+  const v = $("#vpseudo");
+  if (!S.funcAddr) { v.textContent = ""; v.append(el("div", "empty", "not inside a function")); S.pseudoFor = null; return; }
+  if (S.pseudoFor === S.funcAddr) return;
+  let r;
+  try { r = await api("/api/pseudo?a=" + encodeURIComponent(S.funcAddr)); }
+  catch (e) { v.textContent = ""; v.append(el("div", "empty", "decompiler: " + e.message)); S.pseudoFor = null; return; }
+  v.textContent = "";
+  const frag = document.createDocumentFragment();
+  for (const l of r.lines) {
+    const d = el("div", "pl");
+    d.append(" ".repeat(l.i * 4));
+    for (const p of l.p) {
+      const s2 = el("span", "pc-" + p.c, p.t);
+      if (p.a) { s2.className = "pc-r " + "pc-" + p.c; s2.dataset.a = p.a; }
+      d.append(s2);
+    }
+    frag.append(d);
+  }
+  v.append(frag);
+  S.pseudoFor = S.funcAddr;
+}
+$("#vpseudo").addEventListener("click", (e) => { const r = e.target.closest("[data-a]"); if (r) go(r.dataset.a); });
+$("#vpseudo").addEventListener("mouseover", (e) => { const r = e.target.closest("[data-a]"); S.hover = r ? r.dataset.a : null; });
+
+/* ---------- hex ---------- */
+async function loadHex(addr) {
+  const v = $("#vhex");
+  let r;
+  try { r = await api("/api/hex?a=" + encodeURIComponent(addr) + "&n=1024"); } catch (e) { v.textContent = ""; v.append(el("div", "empty", String(e.message))); return; }
+  v.textContent = "";
+  const bar = el("div", "", ""); bar.id = "hexbar";
+  const prev = el("button", "", "− 256"), next = el("button", "", "+ 256");
+  const base = BigInt(r.a);
+  prev.onclick = () => loadHex("0x" + (base - 256n).toString(16));
+  next.onclick = () => loadHex("0x" + (base + 256n).toString(16));
+  bar.append(prev, next, el("span", "", r.a + "  " + r.n));
+  v.append(bar);
+  const bytes = r.hex.match(/../g) || [];
+  for (let i = 0; i < bytes.length; i += 16) {
+    const row = el("div", "hexrow");
+    row.append(el("span", "o", ("0x" + (base + BigInt(i)).toString(16)).padStart(14, " ")));
+    const hx = bytes.slice(i, i + 16);
+    row.append(el("span", "", hx.map((b, k) => b + (k === 7 ? "  " : " ")).join("").padEnd(50, " ")));
+    row.append(el("span", "asc", hx.map(b => { const c = parseInt(b, 16); return c >= 32 && c < 127 ? String.fromCharCode(c) : "."; }).join("")));
+    v.append(row);
+  }
+  if (!bytes.length) v.append(el("div", "empty", "unmapped"));
+}
+
+/* ---------- call tree ---------- */
+async function loadCalls(addr) {
+  const box = $("#calls"); box.textContent = "";
+  let t;
+  try { t = await api("/api/callgraph?d=3&a=" + encodeURIComponent(addr)); } catch (e) { box.append(el("div", "empty", String(e.message))); return; }
+  const mk = (n, depth) => {
+    const link = el("a", "", n.n); link.onclick = (ev) => { ev.preventDefault(); go(n.a); };
+    if (!n.c.length) { const d = el("div", "leaf"); d.append(link); return d; }
+    const d = el("details"); d.open = depth < 2;
+    const s = el("summary"); s.append(link, el("span", "", `  (${n.c.length})`)); d.append(s);
+    for (const c of n.c) d.append(mk(c, depth + 1));
+    return d;
+  };
+  box.append(mk(t, 0));
+}
+
+/* ---------- CFG graph ---------- */
+const CW = 7.3, LH = 16, PAD = 10;
+function buildGraph(f) {
+  const svg = $("#gsvg");
+  svg.textContent = "";
+  S.nodeAt = null; S.gfit = false;
+  if (f.blocks.length > 700) {
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", 20); t.setAttribute("y", 30); t.setAttribute("fill", "currentColor");
+    t.textContent = `graph disabled: ${f.blocks.length} blocks (use the text view)`;
+    svg.append(t); return;
+  }
+  const NS = "http://www.w3.org/2000/svg";
+  const nodes = f.blocks.map((b, i) => {
+    const lines = b.insns.map(i2 => ({ i: i2 }));
+    const showLbl = b.label && i > 0;
+    let maxc = showLbl ? b.label.length + 1 : 0;
+    for (const l of lines) {
+      const o = l.i.o.map(p => p.t).join(""), c = l.i.c.map(p => p.t).join("");
+      maxc = Math.max(maxc, 9 + l.i.m.length + 1 + o.length + (c ? 4 + c.length : 0));
+    }
+    const rows = lines.length + (showLbl ? 1 : 0);
+    return { id: b.a, b, i, showLbl, w: Math.max(80, maxc * CW + PAD * 2), h: rows * LH + PAD * 2, rank: 0, out: [], inn: [] };
+  });
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const edges = f.edges.filter(e => byId.has(e.s) && byId.has(e.d)).map(e => ({ s: byId.get(e.s), d: byId.get(e.d), k: e.k }));
+  edges.forEach(e => { e.s.out.push(e); e.d.inn.push(e); });
+
+  // DFS from every root to mark back edges
+  const state = new Map();
+  const roots = nodes.filter(n => n.id === f.a).concat(nodes.filter(n => n.id !== f.a && n.inn.length === 0));
+  for (const r of roots.concat(nodes)) {
+    if (state.has(r)) continue;
+    const stack = [[r, 0]]; state.set(r, 1);
+    while (stack.length) {
+      const top = stack[stack.length - 1], n = top[0];
+      if (top[1] < n.out.length) {
+        const e = n.out[top[1]++];
+        const st = state.get(e.d);
+        if (st === 1) e.back = true;
+        else if (!st) { state.set(e.d, 1); stack.push([e.d, 0]); }
+      } else { state.set(n, 2); stack.pop(); }
+    }
+  }
+  // longest-path ranking on the DAG
+  const indeg = new Map(nodes.map(n => [n, n.inn.filter(e => !e.back).length]));
+  const q = nodes.filter(n => indeg.get(n) === 0);
+  const order = [];
+  while (q.length) {
+    const n = q.shift(); order.push(n);
+    for (const e of n.out) if (!e.back) {
+      e.d.rank = Math.max(e.d.rank, n.rank + 1);
+      indeg.set(e.d, indeg.get(e.d) - 1);
+      if (indeg.get(e.d) === 0) q.push(e.d);
+    }
+  }
+  const layers = [];
+  for (const n of nodes) (layers[n.rank] = layers[n.rank] || []).push(n);
+  for (let r = 0; r < layers.length; r++) layers[r] = layers[r] || [];
+  layers.forEach(L => L.sort((a, b) => a.i - b.i));
+  // barycenter ordering
+  const idx = (n) => n.pos;
+  const setPos = () => layers.forEach(L => L.forEach((n, k) => (n.pos = k)));
+  setPos();
+  for (let it = 0; it < 6; it++) {
+    for (let r = 1; r < layers.length; r++) {
+      layers[r].forEach(n => { const p = n.inn.filter(e => !e.back && e.s.rank < n.rank); n.bc = p.length ? p.reduce((a, e) => a + idx(e.s), 0) / p.length : n.pos; });
+      layers[r].sort((a, b) => a.bc - b.bc); setPos();
+    }
+    for (let r = layers.length - 2; r >= 0; r--) {
+      layers[r].forEach(n => { const c = n.out.filter(e => !e.back && e.d.rank > n.rank); n.bc = c.length ? c.reduce((a, e) => a + idx(e.d), 0) / c.length : n.pos; });
+      layers[r].sort((a, b) => a.bc - b.bc); setPos();
+    }
+  }
+  // coordinates
+  const GAP = 36, VGAP = 56;
+  let y = 20;
+  layers.forEach(L => {
+    let x = 0; L.forEach(n => { n.x = x; x += n.w + GAP; });
+    L.y = y; L.forEach(n => (n.y = y));
+    y += Math.max(0, ...L.map(n => n.h)) + VGAP;
+  });
+  const cx = (n) => n.x + n.w / 2;
+  const resolve = (L) => { let right = -1e9; L.sort((a, b) => a.x - b.x); L.forEach(n => { n.x = Math.max(n.x, right + GAP); right = n.x + n.w; }); };
+  const widest = Math.max(...layers.map(L => L.length ? L[L.length - 1].x + L[L.length - 1].w : 0));
+  layers.forEach(L => { const w = L.length ? L[L.length - 1].x + L[L.length - 1].w : 0; const off = (widest - w) / 2; L.forEach(n => (n.x += off)); });
+  for (let it = 0; it < 4; it++) {
+    for (let r = 1; r < layers.length; r++) {
+      layers[r].forEach(n => { const p = n.inn.filter(e => !e.back && e.s.rank < n.rank); if (p.length) n.x = p.reduce((a, e) => a + cx(e.s), 0) / p.length - n.w / 2; });
+      resolve(layers[r]);
+    }
+    for (let r = layers.length - 2; r >= 0; r--) {
+      layers[r].forEach(n => { const c = n.out.filter(e => !e.back && e.d.rank > n.rank); if (c.length) n.x = c.reduce((a, e) => a + cx(e.d), 0) / c.length - n.w / 2; });
+      resolve(layers[r]);
+    }
+  }
+  const minX = Math.min(...nodes.map(n => n.x));
+  nodes.forEach(n => (n.x -= minX - 30));
+
+  const vp = document.createElementNS(NS, "g"); vp.id = "vp"; svg.append(vp);
+  const defs = document.createElementNS(NS, "defs");
+  defs.innerHTML = ["fall", "j", "t", "f"].map((c, k) =>
+    `<marker id="ar${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--${c})"/></marker>`).join("");
+  svg.append(defs);
+  const eg = document.createElementNS(NS, "g"); vp.append(eg);
+  const maxRight = Math.max(...nodes.map(n => n.x + n.w));
+  let backLane = 0;
+  for (const e of edges) {
+    const s = e.s, d = e.d;
+    const outs = s.out.length, k = s.out.indexOf(e);
+    const sx = outs > 1 ? s.x + s.w * (0.25 + 0.5 * (k / (outs - 1))) : s.x + s.w / 2;
+    const ins = d.inn.length, kk = d.inn.indexOf(e);
+    const dx = ins > 1 ? d.x + d.w * (0.2 + 0.6 * (kk / (ins - 1))) : d.x + d.w / 2;
+    const sy = s.y + s.h, dy = d.y;
+    const p = document.createElementNS(NS, "path");
+    let dstr;
+    if (e.back || dy <= sy) {
+      const lane = maxRight + 24 + (backLane++ % 12) * 9;
+      dstr = `M${sx},${sy} L${sx},${sy + 14} L${lane},${sy + 14} L${lane},${dy - 14} L${dx},${dy - 14} L${dx},${dy}`;
+    } else {
+      const m = Math.max(24, (dy - sy) / 2);
+      dstr = `M${sx},${sy} C${sx},${sy + m} ${dx},${dy - m} ${dx},${dy}`;
+    }
+    p.setAttribute("d", dstr);
+    p.setAttribute("class", "edge k" + e.k);
+    p.setAttribute("marker-end", `url(#ar${e.k})`);
+    eg.append(p);
+  }
+  const map = new Map();
+  for (const n of nodes) {
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("class", "gnode" + (n.id === f.a ? " entry" : ""));
+    g.setAttribute("transform", `translate(${n.x},${n.y})`);
+    const rc = document.createElementNS(NS, "rect"); rc.setAttribute("width", n.w); rc.setAttribute("height", n.h); g.append(rc);
+    let row = 0;
+    const text = (cls, str, x, yy) => { const t = document.createElementNS(NS, "text"); t.setAttribute("class", cls); t.setAttribute("x", x); t.setAttribute("y", yy); t.textContent = str; g.append(t); return t; };
+    if (n.showLbl) { text("glbl", n.b.label + ":", PAD, PAD + 12 + row * LH); row++; }
+    for (const i of n.b.insns) {
+      const yy = PAD + 12 + row * LH; row++;
+      const t = document.createElementNS(NS, "text"); t.setAttribute("x", PAD); t.setAttribute("y", yy);
+      const ad = document.createElementNS(NS, "tspan"); ad.setAttribute("class", "gaddr"); ad.textContent = i.a.replace(/^0x/, "").slice(-8).padStart(8, "0") + " "; t.append(ad);
+      const mm = document.createElementNS(NS, "tspan"); mm.setAttribute("class", "gm " + mnemClass(i.m)); mm.textContent = i.m; t.append(mm);
+      if (i.o.length) {
+        t.append(" ");
+        for (const p of i.o) {
+          const ts = document.createElementNS(NS, "tspan");
+          if (p.a) { ts.setAttribute("class", "gref"); ts.dataset.a = p.a; }
+          ts.textContent = p.t; t.append(ts);
+        }
+      }
+      if (i.c.length) {
+        const cs = document.createElementNS(NS, "tspan"); cs.setAttribute("class", "gcmt"); cs.textContent = "  ; " + i.c.map(p => p.t).join(""); t.append(cs);
+      }
+      t.dataset.line = i.a; g.append(t);
+    }
+    vp.append(g);
+    n.el = g;
+    for (const i of n.b.insns) map.set(i.a, n);
+    map.set(n.id, n);
+  }
+  S.nodeAt = (a) => map.get(a);
+  S.gnodes = nodes;
+  S.gt = { x: 0, y: 0, k: 1 };
+  fitGraph();
+}
+function applyT() { const vp = $("#vp"); if (vp) vp.setAttribute("transform", `translate(${S.gt.x},${S.gt.y}) scale(${S.gt.k})`); }
+function fitGraph() {
+  const svg = $("#gsvg"), vp = $("#vp");
+  if (!vp || !S.gnodes || !svg.clientWidth) return;
+  const nodes = S.gnodes;
+  const x0 = Math.min(...nodes.map(n => n.x)), x1 = Math.max(...nodes.map(n => n.x + n.w)) + 60;
+  const y0 = Math.min(...nodes.map(n => n.y)), y1 = Math.max(...nodes.map(n => n.y + n.h));
+  const k = Math.min(1, svg.clientWidth / (x1 - x0 + 40), svg.clientHeight / (y1 - y0 + 40));
+  S.gt = { k, x: 20 - x0 * k + Math.max(0, (svg.clientWidth - (x1 - x0) * k) / 2 - 20), y: 20 - y0 * k };
+  S.gfit = true;
+  applyT();
+}
+function focusNode(n) {
+  const svg = $("#gsvg");
+  if (!svg.clientWidth) return;
+  const k = Math.max(S.gt.k, 0.7);
+  S.gt = { k, x: svg.clientWidth / 2 - (n.x + n.w / 2) * k, y: svg.clientHeight / 3 - n.y * k };
+  applyT();
+}
+function zoomAt(f, px, py) {
+  const k = Math.min(3, Math.max(0.05, S.gt.k * f)), r = k / S.gt.k;
+  S.gt = { k, x: px - (px - S.gt.x) * r, y: py - (py - S.gt.y) * r };
+  applyT();
+}
+(function graphInput() {
+  const svg = $("#gsvg");
+  let drag = null;
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const r = svg.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) > Math.abs(e.deltaX) * 2 && !e.shiftKey && e.deltaMode === 0 && Math.abs(e.deltaY) >= 50) zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
+    else { S.gt.x -= e.deltaX; S.gt.y -= e.deltaY; applyT(); }
+  }, { passive: false });
+  svg.addEventListener("mousedown", (e) => { if (e.target.closest(".gref")) return; drag = { x: e.clientX, y: e.clientY, tx: S.gt.x, ty: S.gt.y, moved: false }; svg.classList.add("drag"); });
+  window.addEventListener("mousemove", (e) => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true; S.gt.x = drag.tx + dx; S.gt.y = drag.ty + dy; applyT(); });
+  window.addEventListener("mouseup", () => { drag = null; svg.classList.remove("drag"); });
+  $("#gfit").onclick = fitGraph;
+  $("#gzin").onclick = () => zoomAt(1.25, svg.clientWidth / 2, svg.clientHeight / 2);
+  $("#gzout").onclick = () => zoomAt(0.8, svg.clientWidth / 2, svg.clientHeight / 2);
+  svg.addEventListener("click", (e) => {
+    const ref = e.target.closest(".gref");
+    if (ref) { go(ref.dataset.a); return; }
+    const t = e.target.closest("text[data-line]");
+    if (t) { S.sel = t.dataset.line; $("#where").textContent = t.dataset.line; loadXrefs(t.dataset.line); }
+  });
+  svg.addEventListener("mouseover", (e) => { const r = e.target.closest(".gref"); S.hover = r ? r.dataset.a : null; });
+})();
+
+/* ---------- text-view input ---------- */
+$("#vtext").addEventListener("click", (e) => {
+  const ref = e.target.closest(".ref");
+  if (ref && ref.dataset.a) { go(ref.dataset.a); return; }
+  const ln = e.target.closest(".ln");
+  if (ln && ln.dataset.a) {
+    document.querySelectorAll("#vtext .ln.sel").forEach(x => x.classList.remove("sel"));
+    ln.classList.add("sel"); S.sel = ln.dataset.a; $("#where").textContent = ln.dataset.a; loadXrefs(ln.dataset.a);
+  }
+});
+$("#vtext").addEventListener("mouseover", (e) => { const r = e.target.closest(".ref"); S.hover = r ? r.dataset.a : null; });
+
+/* ---------- dialogs & edits ---------- */
+function ask(title, sub, value) {
+  return new Promise(res => {
+    const d = $("#dlg"), i = $("#dlgI");
+    $("#dlgT").textContent = title; $("#dlgP").textContent = sub; i.value = value || "";
+    d.onclose = () => res(d.returnValue === "ok" ? i.value : null);
+    d.showModal(); i.focus(); i.select();
+  });
+}
+async function refresh() {
+  const keep = S.sel;
+  S.funcAddr = null; S.pseudoFor = null;
+  await go(keep, { push: false });
+  loadList();
+}
+async function doRename() {
+  const target = S.hover || S.sel;
+  if (!target) return;
+  const w = await api("/api/where?a=" + encodeURIComponent(target));
+  const v = await ask("Rename", `${w.a}   (current: ${w.n})`, w.n.replace(/\+0x[0-9a-f]+$/, ""));
+  if (v == null) return;
+  try { await post("/api/rename", { a: w.a, name: v.trim() }); toast(v.trim() ? "renamed" : "name cleared"); await refresh(); }
+  catch (e) { toast(e.message); }
+}
+async function doComment() {
+  if (!S.sel) return;
+  const v = await ask("Comment", S.sel, "");
+  if (v == null) return;
+  try { await post("/api/comment", { a: S.sel, text: v }); await refresh(); } catch (e) { toast(e.message); }
+}
+
+async function doPatch(asm) {
+  if (!S.sel) return;
+  const ln = $(`#vtext .ln[data-a="${S.sel}"]`);
+  const cur = ln && ln.querySelector(".bytes") ? ln.querySelector(".bytes").textContent : "";
+  const v = asm ? await ask("Assemble", `${S.sel}  replaces the instruction here (nop-padded)`, "")
+                : await ask("Patch bytes", `${S.sel}  current: ${cur || "(toggle 'b' to see)"}`, cur);
+  if (v == null || !v.trim()) return;
+  try {
+    if (asm) await post("/api/asm", { a: S.sel, text: v.trim() });
+    else await post("/api/patch", { a: S.sel, hex: v });
+    toast("patched"); await refresh();
+  } catch (e) { toast(e.message); }
+}
+async function doUnpatch() {
+  if (!S.sel) return;
+  try { await post("/api/unpatch", { a: S.sel }); toast("reverted"); await refresh(); } catch (e) { toast(e.message); }
+}
+async function doReanalyze() {
+  toast("reanalyzing...");
+  try { const r = await post("/api/reanalyze", {}); S.info = await api("/api/info"); toast(r.funcs + " functions"); await refresh(); } catch (e) { toast(e.message); }
+}
+async function doExport() {
+  const base = S.info.file.replace(/\/+$/, "");
+  const path = await ask("Export patched binary", "path to write (macOS binaries are ad-hoc signed)", base + ".patched");
+  if (!path) return;
+  try { await post("/api/export", { path, sign: true }); toast("wrote " + path); } catch (e) { toast(e.message); }
+}
+
+/* ---------- global wiring ---------- */
+const typing = () => /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName) || $("#dlg").open;
+document.addEventListener("keydown", (e) => {
+  if (typing()) { if (e.key === "Escape" && document.activeElement !== $("#dlgI")) document.activeElement.blur(); return; }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  switch (e.key) {
+    case "g": e.preventDefault(); $("#goto").focus(); $("#goto").select(); break;
+    case "n": e.preventDefault(); doRename(); break;
+    case ";": e.preventDefault(); doComment(); break;
+    case "p": e.preventDefault(); doPatch(false); break;
+    case "a": e.preventDefault(); doPatch(true); break;
+    case "u": e.preventDefault(); doUnpatch(); break;
+    case "x": e.preventDefault(); if (S.hover || S.sel) loadXrefs(S.hover || S.sel); break;
+    case "/": e.preventDefault(); $("#q").focus(); break;
+    case "b": document.body.classList.toggle("showbytes"); store.set("bytes", document.body.classList.contains("showbytes") ? "1" : "0"); break;
+    case " ": e.preventDefault(); setView(S.view === "graph" ? "text" : "graph"); break;
+    case "Escape": back(); break;
+    case "1": setView("text"); break; case "2": setView("graph"); break; case "3": setView("pseudo"); break; case "4": setView("hex"); break; case "5": setView("calls"); break;
+  }
+});
+$("#goto").addEventListener("keydown", (e) => { if (e.key === "Enter") { go($("#goto").value.trim()); $("#goto").blur(); } if (e.key === "Escape") $("#goto").blur(); });
+$("#q").addEventListener("input", loadList);
+$("#btnBack").onclick = back;
+$("#btnReanalyze").onclick = doReanalyze;
+$("#btnExport").onclick = doExport;
+$("#btnBytes").onclick = () => document.body.classList.toggle("showbytes");
+$("#btnTheme").onclick = () => {
+  const r = document.documentElement, dark = getComputedStyle(r).getPropertyValue("--bg").trim().startsWith("#1");
+  r.dataset.theme = dark ? "light" : "dark"; store.set("theme", r.dataset.theme);
+};
+document.querySelectorAll("#vtabs button").forEach(b => (b.onclick = () => setView(b.dataset.v)));
+window.addEventListener("resize", () => { if (S.view === "graph") fitGraph(); });
+
+(async function init() {
+  const th = store.get("theme", ""); if (th) document.documentElement.dataset.theme = th;
+  if (store.get("bytes", "0") === "1") document.body.classList.add("showbytes");
+  try { S.info = await api("/api/info"); } catch (e) { document.body.textContent = "cannot reach erebus server"; return; }
+  const i = S.info;
+  $("#file").textContent = `${i.file}  —  ${i.format} ${i.arch}`;
+  const pct = i.codeBytes ? (100 * i.covered / i.codeBytes).toFixed(1) : "0";
+  $("#stat").textContent = `${i.funcs} functions · ${i.blocks} blocks · ${i.insns} insns · ${i.xrefs} xrefs · ${i.strings} strings · ${pct}% of code explored`;
+  document.title = "Erebus — " + i.file.split("/").pop();
+  const hp = new URLSearchParams(location.hash.slice(1));
+  if (hp.get("v")) S.view = hp.get("v");
+  if (hp.get("t")) document.documentElement.dataset.theme = hp.get("t");
+  buildTabs(); loadList();
+  setView(S.view);
+  await go(hp.get("a") || i.entry || (i.segments.length ? i.segments[0].a : "0x0"), { push: false });
+  if (S.view === "graph") fitGraph();
+})();
+</script>
+</body>
+</html>
