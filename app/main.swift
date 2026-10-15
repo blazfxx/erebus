@@ -260,39 +260,32 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
 
 final class DropView: NSView {
     var onDrop: (([URL]) -> Void)?
-    var highlighted = false { didSet { needsDisplay = true } }
+    var onHighlight: ((Bool) -> Void)?
     override init(frame: NSRect) { super.init(frame: frame); registerForDraggedTypes([.fileURL]) }
     required init?(coder: NSCoder) { fatalError("not used") }
-    override func draggingEntered(_ s: NSDraggingInfo) -> NSDragOperation { highlighted = true; return .copy }
-    override func draggingExited(_ s: NSDraggingInfo?) { highlighted = false }
+    override func draggingEntered(_ s: NSDraggingInfo) -> NSDragOperation { onHighlight?(true); return .copy }
+    override func draggingExited(_ s: NSDraggingInfo?) { onHighlight?(false) }
     override func performDragOperation(_ s: NSDraggingInfo) -> Bool {
-        highlighted = false
+        onHighlight?(false)
         let urls = s.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         if urls.isEmpty { return false }
         onDrop?(urls)
         return true
     }
-    override func draw(_ dirtyRect: NSRect) {
-        if highlighted {
-            NSColor.controlAccentColor.withAlphaComponent(0.12).setFill()
-            bounds.fill()
-            let p = NSBezierPath(roundedRect: bounds.insetBy(dx: 14, dy: 14), xRadius: 16, yRadius: 16)
-            p.lineWidth = 2
-            NSColor.controlAccentColor.setStroke()
-            p.setLineDash([8, 6], count: 2, phase: 0)
-            p.stroke()
-        }
-    }
 }
 
-final class WelcomeWindowController: NSWindowController {
+/// The first window: a small web page (Contents/Resources/welcome) hosted in a WKWebView, so it shares
+/// the look of the analysis UI. The page asks for things through the `erebus` script message handler.
+final class WelcomeWindowController: NSWindowController, WKScriptMessageHandler, WKNavigationDelegate {
     var onOpenRequest: (() -> Void)?
     var onDrop: (([URL]) -> Void)?
     var onRecent: ((URL) -> Void)?
-    private let recentStack = NSStackView()
+    private let webView: WKWebView
+    private let drop: DropView
+    private var loaded = false
 
     init() {
-        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 430),
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 500),
                            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
                            backing: .buffered, defer: false)
         win.titlebarAppearsTransparent = true
@@ -300,72 +293,53 @@ final class WelcomeWindowController: NSWindowController {
         win.isMovableByWindowBackground = true
         win.center()
         win.setFrameAutosaveName("ErebusWelcome")
+
+        let config = WKWebViewConfiguration()
+        webView = WKWebView(frame: .zero, configuration: config)
+        webView.setValue(false, forKey: "drawsBackground")
+        drop = DropView(frame: win.contentView!.bounds)
         super.init(window: win)
 
-        let drop = DropView(frame: win.contentView!.bounds)
+        config.userContentController.add(self, name: "erebus")
+        webView.navigationDelegate = self
+        // The window, not the page, takes dropped files: a page would try to navigate to them.
+        webView.unregisterDraggedTypes()
+        webView.frame = drop.bounds
+        webView.autoresizingMask = [.width, .height]
         drop.autoresizingMask = [.width, .height]
+        drop.addSubview(webView)
         drop.onDrop = { [weak self] urls in self?.onDrop?(urls) }
+        drop.onHighlight = { [weak self] on in self?.webView.evaluateJavaScript("window.erebus && window.erebus.setDrag(\(on))") }
         win.contentView = drop
 
-        let icon = NSImageView(image: NSApp.applicationIconImage)
-        icon.imageScaling = .scaleProportionallyUpOrDown
-        icon.widthAnchor.constraint(equalToConstant: 96).isActive = true
-        icon.heightAnchor.constraint(equalToConstant: 96).isActive = true
-        let title = NSTextField(labelWithString: "Erebus")
-        title.font = .systemFont(ofSize: 30, weight: .bold)
-        let sub = NSTextField(labelWithString: "Open-source disassembler & decompiler")
-        sub.font = .systemFont(ofSize: 13)
-        sub.textColor = .secondaryLabelColor
-        let hint = NSTextField(labelWithString: "Drop a binary anywhere in this window")
-        hint.font = .systemFont(ofSize: 12)
-        hint.textColor = .tertiaryLabelColor
-        let open = NSButton(title: "Open Binary…", target: self, action: #selector(openTapped))
-        open.bezelStyle = .rounded
-        open.controlSize = .large
-        open.keyEquivalent = "\r"
-        let recentLabel = NSTextField(labelWithString: "Recent")
-        recentLabel.font = .systemFont(ofSize: 11, weight: .semibold)
-        recentLabel.textColor = .secondaryLabelColor
-        recentStack.orientation = .vertical
-        recentStack.alignment = .centerX
-        recentStack.spacing = 2
-
-        let stack = NSStackView(views: [icon, title, sub, open, hint, recentLabel, recentStack])
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 8
-        stack.setCustomSpacing(2, after: title)
-        stack.setCustomSpacing(18, after: sub)
-        stack.setCustomSpacing(18, after: hint)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        drop.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: drop.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: drop.centerYAnchor, constant: 6),
-        ])
-        refreshRecents()
+        if let dir = Bundle.main.resourceURL?.appendingPathComponent("welcome", isDirectory: true) {
+            webView.loadFileURL(dir.appendingPathComponent("index.html"), allowingReadAccessTo: dir)
+        }
     }
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    @objc private func openTapped() { onOpenRequest?() }
-    @objc private func recentTapped(_ b: NSButton) {
-        if let path = b.toolTip { onRecent?(URL(fileURLWithPath: path)) }
+    func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+        switch type {
+        case "open": onOpenRequest?()
+        case "recent": if let path = body["path"] as? String { onRecent?(URL(fileURLWithPath: path)) }
+        case "clear": NSDocumentController.shared.clearRecentDocuments(nil); refreshRecents()
+        default: break
+        }
     }
 
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { loaded = true; refreshRecents() }
+
+    /// Sends the recent documents to the page, newest first.
     func refreshRecents() {
-        recentStack.arrangedSubviews.forEach { recentStack.removeArrangedSubview($0); $0.removeFromSuperview() }
-        let urls = Array(NSDocumentController.shared.recentDocumentURLs.prefix(5))
-        if urls.isEmpty {
-            let l = NSTextField(labelWithString: "Nothing yet")
-            l.font = .systemFont(ofSize: 12); l.textColor = .tertiaryLabelColor
-            recentStack.addArrangedSubview(l)
+        guard loaded else { return }
+        let items: [[String: String]] = NSDocumentController.shared.recentDocumentURLs.prefix(8).map {
+            ["name": $0.lastPathComponent,
+             "dir": $0.deletingLastPathComponent().path.replacingOccurrences(of: NSHomeDirectory(), with: "~"),
+             "path": $0.path]
         }
-        for u in urls {
-            let b = NSButton(title: u.lastPathComponent, target: self, action: #selector(recentTapped(_:)))
-            b.isBordered = false
-            b.contentTintColor = .controlAccentColor
-            b.toolTip = u.path
-            recentStack.addArrangedSubview(b)
+        if let data = try? JSONSerialization.data(withJSONObject: items), let json = String(data: data, encoding: .utf8) {
+            webView.evaluateJavaScript("window.erebus && window.erebus.setRecents(\(json))")
         }
     }
 }

@@ -23,6 +23,8 @@ echo "==> app shell"
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
 swiftc -O app/main.swift -o "$APP/Contents/MacOS/Erebus" -framework Cocoa -framework WebKit
 cp build-app/erebus "$APP/Contents/Resources/bin/erebus"
+mkdir -p "$APP/Contents/Resources/welcome"
+cp app/welcome/index.html app/welcome/icon.png "$APP/Contents/Resources/welcome/"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
 cp THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/THIRD_PARTY_NOTICES.md"
 sed "s/@VERSION@/$VERSION/g" app/Info.plist.in > "$APP/Contents/Info.plist"

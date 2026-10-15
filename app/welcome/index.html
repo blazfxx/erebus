@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Erebus</title>
+<style>
+  :root {
+    color-scheme: dark light;
+    --bg: #17151f; --bg2: #1d1a2b; --panel: rgba(255,255,255,.045); --line: rgba(255,255,255,.09);
+    --ink: #f2f0fa; --muted: #a9a4be; --subtle: #6f6a86; --accent: #7a68ff; --accent2: #9b8dff;
+    --glow: rgba(122,104,255,.34);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f4fd; --bg2: #ebe7fb; --panel: rgba(40,24,120,.045); --line: rgba(40,24,120,.12);
+      --ink: #1b1640; --muted: #5d5883; --subtle: #8d88ad; --accent: #5a43e8; --accent2: #7a68ff;
+      --glow: rgba(122,104,255,.25);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+    color: var(--ink); -webkit-font-smoothing: antialiased; user-select: none; cursor: default; overflow: hidden;
+    background: radial-gradient(60% 70% at 25% 20%, var(--glow), transparent 70%), linear-gradient(160deg, var(--bg2), var(--bg));
+    display: grid; grid-template-columns: 1fr 272px;
+  }
+  .drag { position: fixed; inset: 0 0 auto 0; height: 38px; -webkit-app-region: drag; }
+  main { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 36px 32px 28px; text-align: center; }
+  .icon { width: 128px; height: 128px; filter: drop-shadow(0 18px 28px rgba(20,8,80,.45)); }
+  h1 { margin: 14px 0 0; font-size: 34px; letter-spacing: -.03em; font-weight: 700; }
+  .tag { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+  .open {
+    margin-top: 24px; display: inline-flex; align-items: center; gap: 10px; height: 38px; padding: 0 18px;
+    border: 0; border-radius: 11px; color: #fff; font-weight: 600; font-size: 14px; font-family: inherit; cursor: pointer;
+    background: linear-gradient(180deg, var(--accent2), var(--accent)); box-shadow: 0 10px 22px -10px var(--accent), inset 0 1px 0 rgba(255,255,255,.28);
+  }
+  .open:hover { filter: brightness(1.08); }
+  .open:active { transform: translateY(1px); }
+  kbd { font: 11px ui-monospace, "SF Mono", Menlo, monospace; padding: 1px 6px; border-radius: 5px; background: rgba(255,255,255,.2); }
+  .drop {
+    margin-top: 18px; width: 100%; max-width: 330px; padding: 14px 16px; border: 1.5px dashed var(--line); border-radius: 14px;
+    color: var(--subtle); transition: all .15s;
+  }
+  .drop b { color: var(--muted); font-weight: 600; }
+  .chips { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .chips span { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  aside { border-left: 1px solid var(--line); background: var(--panel); padding: 44px 14px 14px; display: flex; flex-direction: column; min-height: 0; }
+  aside h2 { margin: 0 8px 8px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--subtle); display: flex; justify-content: space-between; }
+  aside h2 button { all: unset; cursor: pointer; text-transform: none; letter-spacing: 0; color: var(--subtle); }
+  aside h2 button:hover { color: var(--ink); }
+  ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+  li button {
+    all: unset; box-sizing: border-box; display: flex; width: 100%; gap: 10px; align-items: center; padding: 7px 8px; border-radius: 9px; cursor: pointer;
+  }
+  li button:hover { background: rgba(122,104,255,.16); }
+  .doc { flex: none; width: 28px; height: 32px; border-radius: 6px; background: linear-gradient(160deg, var(--accent2), var(--accent)); display: grid; place-items: center; color: #fff; font: 700 9px ui-monospace, Menlo, monospace; opacity: .92; }
+  .meta { min-width: 0; }
+  .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dir { font-size: 11px; color: var(--subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+  .empty { margin: 18px 8px; color: var(--subtle); }
+  body.over .drop { border-color: var(--accent2); color: var(--ink); background: rgba(122,104,255,.18); transform: scale(1.02); }
+  body.over .drop b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="drag"></div>
+<main>
+  <img class="icon" src="icon.png" alt="">
+  <h1>Erebus</h1>
+  <p class="tag">Take binaries apart.</p>
+  <button class="open" id="open">Open binary <kbd>⌘O</kbd></button>
+  <div class="drop"><b>Or drop a file anywhere in this window</b><div class="chips"><span>Mach-O</span><span>ELF</span><span>PE</span><span>arm64</span><span>x86-64</span></div></div>
+</main>
+<aside>
+  <h2>Recent <button id="clear" hidden>Clear</button></h2>
+  <ul id="recent"></ul>
+  <p class="empty" id="none">Binaries you open show up here.</p>
+</aside>
+<script>
+  const send = (m) => window.webkit?.messageHandlers?.erebus?.postMessage(m);
+  document.getElementById("open").onclick = () => send({ type: "open" });
+  document.getElementById("clear").onclick = () => send({ type: "clear" });
+  const ext = (n) => (n.includes(".") ? n.split(".").pop() : "bin").slice(0, 4).toUpperCase();
+  // Called by the app with the recent documents: [{ name, dir, path }].
+  window.erebus = {
+    setRecents(items) {
+      const ul = document.getElementById("recent");
+      ul.textContent = "";
+      for (const it of items) {
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.title = it.path;
+        const d = document.createElement("span"); d.className = "doc"; d.textContent = ext(it.name);
+        const m = document.createElement("span"); m.className = "meta";
+        const n = document.createElement("div"); n.className = "name"; n.textContent = it.name;
+        const p = document.createElement("div"); p.className = "dir"; p.textContent = "‎" + it.dir;
+        m.append(n, p); b.append(d, m);
+        b.onclick = () => send({ type: "recent", path: it.path });
+        li.append(b); ul.append(li);
+      }
+      document.getElementById("none").hidden = items.length > 0;
+      document.getElementById("clear").hidden = items.length === 0;
+    },
+    setDrag(on) { document.body.classList.toggle("over", !!on); },
+  };
+</script>
+</body>
+</html>

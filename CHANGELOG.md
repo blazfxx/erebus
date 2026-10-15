@@ -3,6 +3,13 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-10-15
+
+### Changed
+- **New icon**: Blobby holding a magnifier over one eye, over a faint listing, on a violet tile.
+- **New welcome window**: a dark (or light, following macOS) page with the icon, an Open binary button, a drop area that lights up while you drag a file over the window, and a Recent list with file names and folders (and Clear).
+- **New look for the analysis UI** to match the Blobby apps: neutral greys, one accent, Inter, tabs and a floating graph toolbar.
+
 ## [0.1.0] — 2026-10-14
 
 First public release.

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(erebus VERSION 0.1.0 LANGUAGES CXX)
+project(erebus VERSION 0.2.0 LANGUAGES CXX)
 
 option(EREBUS_STATIC_CAPSTONE "Link Capstone statically (used for the self-contained app bundle)" OFF)
 
