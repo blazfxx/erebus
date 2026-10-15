@@ -1,3 +1,4 @@
+#include <cstring>
 #include "analysis/analyzer.h"
 
 #include <algorithm>

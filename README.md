@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="app/AppIcon.svg" width="96" alt="">
+
 # Erebus
 
 **An open-source disassembler, analysis database and decompiler — written from scratch, with a native macOS app.**
