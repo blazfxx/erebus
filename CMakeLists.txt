@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(erebus VERSION 0.2.0 LANGUAGES CXX)
+project(erebus VERSION 0.3.0 LANGUAGES CXX)
 
 option(EREBUS_STATIC_CAPSTONE "Link Capstone statically (used for the self-contained app bundle)" OFF)
 
@@ -9,10 +9,19 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(CAPSTONE REQUIRED IMPORTED_TARGET capstone)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(CAPSTONE IMPORTED_TARGET capstone)
+endif()
+if(NOT CAPSTONE_FOUND)
+  # No pkg-config (or no capstone.pc): locate Capstone by hand. Set CAPSTONE_LIB / CAPSTONE_INCLUDE to override.
+  find_library(CAPSTONE_LIB NAMES capstone libcapstone.a HINTS /opt/homebrew/lib /usr/local/lib REQUIRED)
+  find_path(CAPSTONE_INCLUDE capstone/capstone.h HINTS /opt/homebrew/include /usr/local/include REQUIRED)
+  add_library(PkgConfig::CAPSTONE INTERFACE IMPORTED)
+  set_target_properties(PkgConfig::CAPSTONE PROPERTIES INTERFACE_LINK_LIBRARIES "${CAPSTONE_LIB}" INTERFACE_INCLUDE_DIRECTORIES "${CAPSTONE_INCLUDE}")
+endif()
 find_package(SQLite3 REQUIRED)
-find_path(CAPSTONE_ROOT_INC capstone/capstone.h HINTS /opt/homebrew/include /usr/local/include ${CAPSTONE_INCLUDE_DIRS}/..)
+find_path(CAPSTONE_ROOT_INC capstone/capstone.h HINTS /opt/homebrew/include /usr/local/include ${CAPSTONE_INCLUDE_DIRS}/.. ${CAPSTONE_INCLUDE})
 find_path(HTTPLIB_INC httplib.h HINTS /opt/homebrew/include /usr/local/include REQUIRED)
 find_path(NLOHMANN_INC nlohmann/json.hpp HINTS /opt/homebrew/include /usr/local/include REQUIRED)
 

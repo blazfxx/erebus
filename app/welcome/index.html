@@ -79,7 +79,22 @@
   <p class="empty" id="none">Binaries you open show up here.</p>
 </aside>
 <script>
-  const send = (m) => window.webkit?.messageHandlers?.erebus?.postMessage(m);
+  // Hosted by the Blobby Launcher (window.erebusHost) or by the standalone Mac app (WKWebView).
+  const send = (m) => (window.erebusHost ? window.erebusHost.send(m) : window.webkit?.messageHandlers?.erebus?.postMessage(m));
+  if (window.erebusHost) {
+    // The launcher's window is a browser page, so it takes dropped files itself.
+    let depth = 0;
+    const over = (on) => document.body.classList.toggle("over", on);
+    addEventListener("dragenter", (e) => { e.preventDefault(); depth++; over(true); });
+    addEventListener("dragover", (e) => e.preventDefault());
+    addEventListener("dragleave", () => { depth = Math.max(0, depth - 1); if (!depth) over(false); });
+    addEventListener("drop", (e) => {
+      e.preventDefault(); depth = 0; over(false);
+      const paths = [...(e.dataTransfer?.files ?? [])].map((f) => window.erebusHost.pathFor(f)).filter(Boolean);
+      if (paths.length) send({ type: "drop", paths });
+    });
+    addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "o") { e.preventDefault(); send({ type: "open" }); } });
+  }
   document.getElementById("open").onclick = () => send({ type: "open" });
   document.getElementById("clear").onclick = () => send({ type: "clear" });
   const ext = (n) => (n.includes(".") ? n.split(".").pop() : "bin").slice(0, 4).toUpperCase();

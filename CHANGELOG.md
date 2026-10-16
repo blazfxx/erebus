@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-10-16
+
+### Added
+- **Opens apps**: an `.app`, `.framework` or other bundle opens like a file. Erebus finds the program inside through `Info.plist` (or the bundle's name, or the one file in `Contents/MacOS`). Opening one used to fail with "file too small". A folder with no program in it now says so, and a file that is too small names itself and its size.
+- **MCP server** (`mcp/erebus-mcp.mjs`, no dependencies): serves Erebus to [REA](https://github.com/morluto/rea) through the tool profile it expects from an IDA MCP server, so REA runs on Erebus instead of IDA. Tested against REA's own CLI and MCP server.
+- **Launcher package** (`scripts/build-package.sh`): the engine, welcome page and MCP server in one `.tar.gz` that the Blobby Launcher downloads and opens in its own window.
+- Hold the top of the welcome window to drag it (the page covered the title bar, so it would not move).
+
+### Changed
+- CMake finds Capstone without pkg-config, so the engine builds on more machines.
+
 ## [0.2.0] — 2026-10-15
 
 ### Changed

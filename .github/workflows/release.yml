@@ -16,12 +16,14 @@ jobs:
         run: brew install cmake ninja capstone cpp-httplib nlohmann-json
       - name: Build app
         run: scripts/build-app.sh --zip --dmg
+      - name: Build the launcher package
+        run: scripts/build-package.sh
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/*.zip dist/*.dmg --clobber
+            gh release upload "$GITHUB_REF_NAME" dist/*.zip dist/*.dmg dist/*.tar.gz --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.dmg --generate-notes --title "Erebus ${GITHUB_REF_NAME#v}"
+            gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.dmg dist/*.tar.gz --generate-notes --title "Erebus ${GITHUB_REF_NAME#v}"
           fi

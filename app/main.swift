@@ -59,6 +59,13 @@ enum Engine {
         return (p.terminationStatus, String(decoding: outData, as: UTF8.self), String(decoding: errData, as: UTF8.self))
     }
 
+    /// The program inside a bundle (.app, .framework, plug-in); anything else is returned as it is.
+    static func program(in url: URL) -> URL {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { return url }
+        return Bundle(url: url)?.executableURL ?? url
+    }
+
     /// Architectures inside a fat Mach-O ([] if the file is not fat).
     static func fatArchitectures(_ file: URL) -> [String] {
         let r = run("/usr/bin/lipo", ["-archs", file.path])
@@ -258,6 +265,16 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
 
 // MARK: - Welcome window
 
+/// A strip along the top of a window whose content is a web page: the page would swallow the mouse,
+/// so this takes it and moves the window (the title bar is hidden, so there is nothing else to hold).
+final class DragStrip: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
+    override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+    override func mouseUp(with event: NSEvent) {
+        if event.clickCount == 2 { window?.performZoom(nil) }
+    }
+}
+
 final class DropView: NSView {
     var onDrop: (([URL]) -> Void)?
     var onHighlight: ((Bool) -> Void)?
@@ -308,6 +325,9 @@ final class WelcomeWindowController: NSWindowController, WKScriptMessageHandler,
         webView.autoresizingMask = [.width, .height]
         drop.autoresizingMask = [.width, .height]
         drop.addSubview(webView)
+        let strip = DragStrip(frame: NSRect(x: 0, y: drop.bounds.height - 44, width: drop.bounds.width, height: 44))
+        strip.autoresizingMask = [.width, .minYMargin]
+        drop.addSubview(strip)
         drop.onDrop = { [weak self] urls in self?.onDrop?(urls) }
         drop.onHighlight = { [weak self] on in self?.webView.evaluateJavaScript("window.erebus && window.erebus.setDrag(\(on))") }
         win.contentView = drop
@@ -412,7 +432,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         var arch: String? = nil
         if url.pathExtension.lowercased() != "erdb" {
-            let archs = Engine.fatArchitectures(url)
+            let archs = Engine.fatArchitectures(Engine.program(in: url))
             if !archs.isEmpty {
                 let a = NSAlert()
                 a.messageText = "\(url.lastPathComponent) contains several architectures"

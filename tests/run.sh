@@ -18,6 +18,20 @@ check hello_x64 "$(python3 tests/verify_macho.py tests/bin/hello_x64 x86_64)"
 python3 tests/mkelf.py tests/bin/tiny.elf
 out=$(./build/erebus open tests/bin/tiny.elf -o /tmp/er_t.erdb -q && ./build/erebus /tmp/er_t.erdb funcs)
 echo "$out" | grep -q "func_b" && echo "elf: ok" || { echo "elf: FAIL"; fail=1; }
+# the MCP server REA talks to (REA runs on Erebus through it)
+EREBUS_BIN=$PWD/build/erebus node tests/mcp.mjs tests/bin/tiny.elf || { echo "mcp bridge: FAIL"; fail=1; }
+# a .app (or .framework) opens like a file: the program inside is found through Info.plist or the folder name
+b=$(mktemp -d)
+mkdir -p $b/Tool.app/Contents/MacOS $b/Odd.app/Contents/MacOS $b/Kit.framework/Versions/A $b/Empty.app
+cp tests/bin/tiny.elf $b/Tool.app/Contents/MacOS/Tool
+cp tests/bin/tiny.elf $b/Odd.app/Contents/MacOS/RealName
+printf '<plist><dict><key>CFBundleExecutable</key><string>RealName</string></dict></plist>' > $b/Odd.app/Contents/Info.plist
+cp tests/bin/tiny.elf $b/Kit.framework/Versions/A/Kit; ln -s A $b/Kit.framework/Versions/Current
+for app in Tool.app Odd.app/ Kit.framework; do
+  ./build/erebus open "$b/$app" -o $b/x.erdb -q && ./build/erebus $b/x.erdb funcs | grep -q func_b && echo "bundle $app: ok" || { echo "bundle $app: FAIL"; fail=1; }
+done
+./build/erebus open $b/Empty.app -o $b/x.erdb -q 2>&1 | grep -q "is a folder" && echo "empty bundle: ok" || { echo "empty bundle: FAIL"; fail=1; }
+rm -rf $b
 # decompiler must survive every function of real binaries
 dc() {  # name db-args...
   out=$(./build/erebus open "$1" $2 -o /tmp/er_dc.erdb -q && ./build/erebus /tmp/er_dc.erdb decompall)
