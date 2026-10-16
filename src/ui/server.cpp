@@ -82,10 +82,12 @@ int serveUi(Session& s, const std::string& host, int port, bool openBrowser, int
     httplib::Server svr;
     std::mutex mu;   // Capstone handle + session mutation are single-threaded
 
-    auto reply = [](httplib::Response& res, const json& j) { res.set_content(j.dump(), "application/json"); };
-    auto fail = [](httplib::Response& res, int code, const std::string& msg) {
+    // Binaries contain arbitrary bytes; never let invalid UTF-8 make the encoder throw (-> HTTP 500).
+    auto dumpJson = [](const json& j) { return j.dump(-1, ' ', false, json::error_handler_t::replace); };
+    auto reply = [dumpJson](httplib::Response& res, const json& j) { res.set_content(dumpJson(j), "application/json"); };
+    auto fail = [dumpJson](httplib::Response& res, int code, const std::string& msg) {
         res.status = code;
-        res.set_content(json{{"error", msg}}.dump(), "application/json");
+        res.set_content(dumpJson(json{{"error", msg}}), "application/json");
     };
     auto addrParam = [&](const httplib::Request& req, const char* key, uint64_t& a) {
         if (!req.has_param(key)) return false;

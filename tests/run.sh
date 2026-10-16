@@ -61,4 +61,16 @@ from erebus import Erebus
 with Erebus.open("tests/bin/hello_arm64") as e:
     assert e.info()["funcs"] == 9 and "fib" in e.pseudo("_fib") and e.xrefs("_fib")
 PY
+# regression: a string cut mid-character by the 512-byte cap must not break the JSON API (used to be HTTP 500)
+python3 - <<'PY' && echo "utf-8 strings api: ok" || { echo "utf-8 strings api: FAIL"; fail=1; }
+import subprocess, sys, tempfile, os
+sys.path.insert(0, "tools")
+from erebus import Erebus
+d = tempfile.mkdtemp()
+src = os.path.join(d, "u.c")
+open(src, "w").write('const char *s = "a' + "\\xc3\\xa9" * 400 + '"; int main(void){ return s[0]; }\n')
+subprocess.run(["clang", "-O1", "-o", os.path.join(d, "u"), src], check=True)
+with Erebus.open(os.path.join(d, "u")) as e:
+    assert any(len(t[1]) > 100 for t in e.strings()), "long string missing"
+PY
 exit $fail

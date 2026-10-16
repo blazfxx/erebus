@@ -321,7 +321,11 @@ private:
     // ---- strings -------------------------------------------------------------
 
     void addString(uint64_t addr, uint32_t len, uint8_t wide, std::string text) {
-        if (text.size() > 512) text.resize(512);
+        if (text.size() > 512) {
+            size_t cut = 512;   // never cut inside a UTF-8 sequence
+            while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;
+            text.resize(cut);
+        }
         out.strings.emplace(addr, StringEntry{len, wide, std::move(text)});
     }
 
