@@ -3,6 +3,11 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] — 2026-10-16
+
+### Fixed
+- Opening some programs (Calculator.app, for one) failed with an HTTP 500: a string cut at 512 bytes could end inside a multi-byte character and the JSON encoder refused it. Strings are now cut on a character boundary, and the encoder replaces invalid UTF-8 instead of failing. Found by the Lantern CI.
+
 ## [0.3.0] — 2026-10-16
 
 ### Added

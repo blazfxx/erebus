@@ -14,7 +14,7 @@ import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 const here = dirname(fileURLToPath(import.meta.url));
 const ENGINE = [process.env.EREBUS_BIN, join(here, "..", "bin", "erebus"), join(here, "erebus")].find(
   (p) => p && existsSync(p),
